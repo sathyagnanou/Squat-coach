@@ -3,15 +3,20 @@ import '@marcellejs/core/dist/marcelle.css';
 import * as marcelle from '@marcellejs/core';
 import { labelBar } from './components';
 
-// ✅ Store
-const store = marcelle.dataStore('https://marcelle.lisn.upsaclay.fr/iml2026/api');
-try {
-  await store.connect();
-} catch (error) {
-  await store.loginWithUI();
-}
+// ✅ Store — use VITE_DATA_STORE_URL, or in dev default to 'memory' so the app works without the remote backend
+const storeUrl =
+  import.meta.env.VITE_DATA_STORE_URL ??
+  (import.meta.env.DEV ? 'memory' : 'https://marcelle.lisn.upsaclay.fr/iml2026/api');
+const store = marcelle.dataStore(storeUrl);
 
-// ✅ Labels
+async function init() {
+  try {
+    await store.connect();
+  } catch (error) {
+    await store.loginWithUI();
+  }
+
+  // ✅ Labels
 const classLabels = ['good', 'knees_in', 'heels_up', 'shallow'];
 let selectedLabel = classLabels[0];
 
@@ -35,7 +40,7 @@ if (upload.$images) {
 const featureExtractor = marcelle.mobileNet();
 const classifier = marcelle
   .mlpClassifier({ layers: [32, 32], epochs: 20 })
-  .sync(store, `mlp-squat-${store.user.team}`);
+  .sync(store, `mlp-squat-${store.user?.team ?? 'local'}`);
 
 const prog = marcelle.trainingProgress(classifier);
 
@@ -160,8 +165,8 @@ trainBtn.$click.subscribe(async () => {
 // Dashboard (same layout style)
 // --------------------
 const dashboard = marcelle.dashboard({
-  title: `IML2026 - Squat Coach (Team ${store.user.team})`,
-  author: `Team ${store.user.team}`,
+  title: `IML2026 - Squat Coach (Team ${store.user?.team ?? 'local'})`,
+  author: `Team ${store.user?.team ?? 'local'}`,
 });
 
 dashboard
@@ -180,5 +185,8 @@ dashboard.page('Training').use(trainBtn, prog);
 dashboard.page('Real-time Prediction').use(webcam, predViz);
 dashboard.page('Performance').use(trainingBrowser, testBrowser);
 
-dashboard.show();
-wireHoldEvents();
+  dashboard.show();
+  wireHoldEvents();
+}
+
+init();
