@@ -35,6 +35,26 @@ function nextName(label) {
   return `${label}_${next}`;
 }
 
+/**
+ * Convert ImageData to a thumbnail data URL for datasetBrowser display.
+ * Marcelle's datasetBrowser only loads 'thumbnail' for display, not 'x'.
+ */
+function imageDataToThumbnail(imgData, maxSize = 100) {
+  if (!imgData || !imgData.data) return null;
+  const scale = Math.min(maxSize / imgData.width, maxSize / imgData.height, 1);
+  const w = Math.round(imgData.width * scale);
+  const h = Math.round(imgData.height * scale);
+  const srcCanvas = document.createElement('canvas');
+  srcCanvas.width = imgData.width;
+  srcCanvas.height = imgData.height;
+  srcCanvas.getContext('2d').putImageData(imgData, 0, 0);
+  const dstCanvas = document.createElement('canvas');
+  dstCanvas.width = w;
+  dstCanvas.height = h;
+  dstCanvas.getContext('2d').drawImage(srcCanvas, 0, 0, imgData.width, imgData.height, 0, 0, w, h);
+  return dstCanvas.toDataURL('image/jpeg');
+}
+
 async function init() {
   try {
     await store.connect();
@@ -47,20 +67,16 @@ async function init() {
 const webcam = marcelle.webcam({ width: 224, height: 224 });
 const upload = marcelle.imageUpload({ width: 224, height: 224 });
 
-// Keep last webcam / uploaded image for labeling (more robust than relying on internal props)
+// Keep last webcam / uploaded image and thumbnail for labeling
 let lastWebcamImage = null;
-if (webcam.$images) {
-  webcam.$images.subscribe((img) => {
-    lastWebcamImage = img;
-  });
-}
+let lastWebcamThumbnail = null;
+if (webcam.$images) webcam.$images.subscribe((img) => { lastWebcamImage = img; });
+if (webcam.$thumbnails) webcam.$thumbnails.subscribe((t) => { lastWebcamThumbnail = t; });
 
 let lastUploaded = null;
-if (upload.$images) {
-  upload.$images.subscribe((img) => {
-    lastUploaded = img;
-  });
-}
+let lastUploadThumbnail = null;
+if (upload.$images) upload.$images.subscribe((img) => { lastUploaded = img; });
+if (upload.$thumbnails) upload.$thumbnails.subscribe((t) => { lastUploadThumbnail = t; });
 
 // ✅ Model
 const featureExtractor = marcelle.mobileNet();
@@ -101,12 +117,15 @@ async function saveExampleToTraining(label) {
     console.warn('No image available: activate webcam or upload an image.');
     return;
   }
+  const fromWebcam = !!lastWebcamImage;
+  const thumb = (fromWebcam ? lastWebcamThumbnail : lastUploadThumbnail) || imageDataToThumbnail(img);
   await trainingSet.create({
     name: nextName(label),
     x: img,
     y: label,
+    thumbnail: thumb,
     createdAt: Date.now(),
-    source: lastWebcamImage ? 'webcam' : 'upload',
+    source: fromWebcam ? 'webcam' : 'upload',
   });
 }
 
@@ -116,9 +135,11 @@ async function saveExampleToTest(label) {
     console.warn('No uploaded image available: please upload a test image first.');
     return;
   }
+  const thumb = lastUploadThumbnail || imageDataToThumbnail(img);
   await testSet.create({
     x: img,
     y: label,
+    thumbnail: thumb,
     createdAt: Date.now(),
     source: 'upload-test',
   });
@@ -158,11 +179,12 @@ function startRecording() {
   recordInterval = setInterval(async () => {
     const img = lastWebcamImage;
     if (!img) return;
-
+    const thumb = lastWebcamThumbnail || imageDataToThumbnail(img);
     await trainingSet.create({
       name: nextName(selectedLabel),
       x: img,
       y: selectedLabel,
+      thumbnail: thumb,
       createdAt: Date.now(),
       source: 'webcam-toggle',
     });

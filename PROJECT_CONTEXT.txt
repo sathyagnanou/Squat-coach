@@ -93,8 +93,9 @@ package.json, vite.config.js, svelte.config.js, index.html, .gitignore, etc.
 --------------------------------------------------------------------------------
 - Single image upload only — Marcelle imageUpload exposes one current image;
   bulk upload not supported in UI; test set typically prepared in advance.
-- datasetBrowser shows "thumbnail" placeholders — Marcelle's default; custom
-  instance names (good_1, etc.) are stored but not displayed in the browser.
+- datasetBrowser displays actual image thumbnails when `thumbnail` is stored
+  with each instance (new captures include thumbnails); custom instance names
+  (good_1, etc.) are stored but may not be displayed in the browser.
 - repReviewer component exists but is NOT wired — would need queueSet dataset
   and pipeline that pushes predictions + uncertainty into that queue.
 - trainingSet.items().toArray() — used for training; may differ across Marcelle
