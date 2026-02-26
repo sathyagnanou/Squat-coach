@@ -1,0 +1,121 @@
+================================================================================
+SQUAT-COACH PROJECT — Context & Implementation Summary
+================================================================================
+Last updated: 2025-02-26
+Purpose: This file documents the codebase so another chatbot or developer can
+         understand the project structure, what was implemented, and how it works.
+
+--------------------------------------------------------------------------------
+1. PROJECT OVERVIEW
+--------------------------------------------------------------------------------
+- Name: Squat Coach (IML2026 class project)
+- Framework: Marcelle (https://marcelle.dev) — interactive ML toolkit
+- Stack: JavaScript, Svelte, Vite
+-   Scenario (teacher feedback): Focus on movement quality; a coach configures the
+  system for athletes who need feedback on squat form (labels: good, knees_in,
+  shallow — 3-label classification). The model is personalized (trained on user/coach data),
+  not a pre-trained generic classifier.
+
+--------------------------------------------------------------------------------
+2. REPOSITORY STRUCTURE
+--------------------------------------------------------------------------------
+src/
+  index.js              — Main app: store, datasets, model, UI, training, eval
+  components/
+    index.js            — Exports labelBar, repReviewer, evalResults
+    label-bar/
+      index.js
+      label-bar.component.js   — Marcelle Component wrapper
+      label-bar.view.svelte    — Row of label buttons (good, knees_in, shallow)
+    repReviewer/
+      index.js
+      repReviewer.component.js — Uncertainty-sampling review component
+      repReviewer.view.svelte  — NOT YET WIRED into main app (has queueSet dep)
+    evalResults/
+      index.js
+      evalResults.component.js — Marcelle Component, takes Svelte writable store
+      evalResults.view.svelte  — Displays accuracy, per-class acc, confusion matrix
+
+package.json, vite.config.js, svelte.config.js, index.html, .gitignore, etc.
+
+--------------------------------------------------------------------------------
+3. MAIN APP (src/index.js) — IMPLEMENTED FEATURES
+--------------------------------------------------------------------------------
+
+3.1 Store & polyfill
+- Uses marcelle.dataStore(storeUrl) with VITE_DATA_STORE_URL or course backend
+- Array.prototype.toArray polyfill so Marcelle's internal .map(...).toArray()
+  works when we pass plain arrays to classifier.train()
+
+3.2 Datasets
+- trainingSet = marcelle.dataset('project-images', store)   — user-recorded reps
+- testSet    = marcelle.dataset('project-test-images', store) — curated test set
+
+3.3 Inputs
+- webcam = marcelle.webcam({ width: 224, height: 224 })
+- upload = marcelle.imageUpload({ width: 224, height: 224 })
+- lastWebcamImage, lastUploaded — kept via $images subscriptions
+
+3.4 Model
+- featureExtractor = marcelle.mobileNet()
+- classifier = marcelle.mlpClassifier({ layers: [32, 32], epochs: 20 })
+  .sync(store, 'mlp-squat-${team}')
+- Transfer learning: MobileNet → MLP classifier
+
+3.5 Labeling & data collection
+- classLabels = ['good', 'knees_in', 'shallow']
+- labelBar component — selects which label to use
+- saveExampleToTraining(label) — saves webcam or upload to trainingSet
+- saveExampleToTest(label) — saves upload to testSet (for curated Google images)
+- Instance names: good_1, good_2, knees_in_1, etc. via nextName() and labelCounts
+
+3.6 Buttons
+- "Capture 1 instance (selected label)" → trainingSet
+- "Add uploaded image to TEST (selected label)" → testSet
+- "Start recording (every 0.5s)" / "Click to stop recording" — toggle, 500ms interval
+- "Train model" — trains classifier on trainingSet (fetches items via .items().toArray())
+- "Evaluate on TEST set" — runs model on testSet, computes accuracy + confusion matrix
+
+3.7 Evaluation
+- evalResultsStore (Svelte writable) holds { status, accuracy, perClass, confusion }
+- evalResultsComp displays results in UI (idle / loading / done / error)
+- Per-class accuracy and confusion matrix shown in "Evaluation results" panel
+
+3.8 Dashboard pages
+- Data Management: webcam, featureExtractor, upload, labelsUI, captureOneBtn,
+  recordBtn, addToTestBtn, trainingBrowser
+- Training: trainBtn, prog (trainingProgress)
+- Real-time Prediction: webcam, predViz (confidencePlot)
+- Performance: evalBtn, evalResultsComp, trainingBrowser, testBrowser
+
+--------------------------------------------------------------------------------
+4. KNOWN LIMITATIONS / DESIGN CHOICES
+--------------------------------------------------------------------------------
+- Single image upload only — Marcelle imageUpload exposes one current image;
+  bulk upload not supported in UI; test set typically prepared in advance.
+- datasetBrowser shows "thumbnail" placeholders — Marcelle's default; custom
+  instance names (good_1, etc.) are stored but not displayed in the browser.
+- repReviewer component exists but is NOT wired — would need queueSet dataset
+  and pipeline that pushes predictions + uncertainty into that queue.
+- trainingSet.items().toArray() — used for training; may differ across Marcelle
+  versions; polyfill ensures arrays work with classifier.train().
+
+--------------------------------------------------------------------------------
+5. HOW TO RUN
+--------------------------------------------------------------------------------
+  cd /home/mhayakawa/Squat-coach
+  VITE_DATA_STORE_URL=https://marcelle.lisn.upsaclay.fr/iml2026/api npm run dev
+  Open http://localhost:5173
+
+--------------------------------------------------------------------------------
+6. TYPICAL WORKFLOW
+--------------------------------------------------------------------------------
+1. Data Management: Record/upload images, label them, add to training or test set
+2. Training: Click "Train model" (requires training data)
+3. Real-time Prediction: Turn on webcam, see confidence plot
+4. Performance: Add test images (curated), click "Evaluate on TEST set",
+   view accuracy and confusion matrix in the Evaluation results panel
+
+================================================================================
+End of PROJECT_CONTEXT.txt
+================================================================================

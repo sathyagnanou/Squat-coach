@@ -1,7 +1,8 @@
 // src/index.js
 import '@marcellejs/core/dist/marcelle.css';
 import * as marcelle from '@marcellejs/core';
-import { labelBar } from './components';
+import { writable } from 'svelte/store';
+import { labelBar, evalResults } from './components';
 
 // ✅ Store — use VITE_DATA_STORE_URL, or in dev default to 'memory' so the app works without the remote backend
 const storeUrl =
@@ -18,7 +19,7 @@ if (!Array.prototype.toArray) {
 }
 
 // ✅ Labels
-const classLabels = ['good', 'knees_in', 'heels_up', 'shallow'];
+const classLabels = ['good', 'knees_in', 'shallow'];
 let selectedLabel = classLabels[0];
 
 // ✅ Datasets (ONE training set so datasetBrowser groups by y like your screenshot)
@@ -132,7 +133,7 @@ captureOneBtn.$click.subscribe(async () => {
   await saveExampleToTraining(selectedLabel);
 });
 
-// --------------------
+ // --------------------
 // Add uploaded image to TEST set
 // --------------------
 const addToTestBtn = marcelle.button('Add uploaded image to TEST (selected label)');
@@ -210,6 +211,71 @@ trainBtn.$click.subscribe(async () => {
 });
 
 // --------------------
+// Evaluate on TEST set
+// --------------------
+const evalResultsStore = writable({
+  status: 'idle',
+  message: 'Click "Evaluate on TEST set" to run evaluation.',
+});
+const evalResultsComp = evalResults(evalResultsStore);
+
+const evalBtn = marcelle.button('Evaluate on TEST set');
+evalBtn.title = 'Run model on test set';
+evalBtn.$click.subscribe(async () => {
+  if (!classifier.ready) {
+    evalResultsStore.set({ status: 'error', message: 'Model not trained yet. Train first, then evaluate.' });
+    return;
+  }
+  try {
+    evalResultsStore.set({ status: 'loading', message: 'Running evaluation...' });
+    await testSet.ready;
+    const items = await testSet.items().toArray();
+    if (items.length === 0) {
+      evalResultsStore.set({ status: 'error', message: 'Test set is empty. Add test images first.' });
+      return;
+    }
+
+    const confusion = {};
+    for (const y of classLabels) {
+      confusion[y] = {};
+      for (const pred of classLabels) confusion[y][pred] = 0;
+    }
+
+    for (const it of items) {
+      if (!it?.x || !it?.y) continue;
+      const feat = await featureExtractor.process(it.x);
+      const out = await classifier.predict(feat);
+      const pred = (typeof out === 'object' && out?.label != null) ? out.label : String(out);
+      const trueLabel = it.y;
+      if (classLabels.includes(trueLabel) && classLabels.includes(pred)) {
+        confusion[trueLabel][pred] = (confusion[trueLabel][pred] || 0) + 1;
+      }
+    }
+
+    let correct = 0;
+    let total = 0;
+    const perClass = {};
+    for (const y of classLabels) {
+      const row = confusion[y];
+      const classTotal = Object.values(row).reduce((a, b) => a + b, 0);
+      perClass[y] = classTotal > 0 ? ((row[y] || 0) / classTotal * 100).toFixed(1) + '%' : '—';
+      correct += row[y] || 0;
+      total += classTotal;
+    }
+    const accuracy = total > 0 ? (correct / total * 100).toFixed(1) : 0;
+
+    evalResultsStore.set({
+      status: 'done',
+      accuracy,
+      perClass,
+      confusion,
+    });
+  } catch (err) {
+    evalResultsStore.set({ status: 'error', message: err?.message || 'Evaluation failed.' });
+  }
+});
+
+// --------------------
 // Dashboard (same layout style)
 // --------------------
 const dashboard = marcelle.dashboard({
@@ -232,7 +298,7 @@ dashboard
 
 dashboard.page('Training').use(trainBtn, prog);
 dashboard.page('Real-time Prediction').use(webcam, predViz);
-dashboard.page('Performance').use(trainingBrowser, testBrowser);
+dashboard.page('Performance').use(evalBtn, evalResultsComp, trainingBrowser, testBrowser);
 
 dashboard.show();
 
