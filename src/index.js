@@ -9,6 +9,14 @@ const storeUrl =
   (import.meta.env.DEV ? 'memory' : 'https://marcelle.lisn.upsaclay.fr/iml2026/api');
 const store = marcelle.dataStore(storeUrl);
 
+// Small polyfill so arrays work with Marcelle's internal `.map(...).toArray()` chains
+if (!Array.prototype.toArray) {
+  // eslint-disable-next-line no-extend-native
+  Array.prototype.toArray = function () {
+    return this;
+  };
+}
+
 // ✅ Labels
 const classLabels = ['good', 'knees_in', 'heels_up', 'shallow'];
 let selectedLabel = classLabels[0];
@@ -20,41 +28,10 @@ const testSet = marcelle.dataset('project-test-images', store);
 // Keep simple per-label counters to generate instance names like "good_1"
 const labelCounts = {};
 
-function bumpLabelCount(label, n) {
-  const current = labelCounts[label] || 0;
-  labelCounts[label] = Math.max(current, n);
-}
-
 function nextName(label) {
   const next = (labelCounts[label] || 0) + 1;
   labelCounts[label] = next;
   return `${label}_${next}`;
-}
-
-async function ensureInstanceNames(dataset) {
-  await dataset.ready;
-  const items = await dataset.items().toArray();
-
-  for (const it of items) {
-    if (!it?.y || !it?._id) continue;
-
-    if (typeof it.name === 'string') {
-      const m = it.name.match(/^(.+)_([0-9]+)$/);
-      if (m && m[1] === it.y) {
-        bumpLabelCount(it.y, parseInt(m[2], 10));
-        continue;
-      }
-    }
-
-    const next = (labelCounts[it.y] || 0) + 1;
-    labelCounts[it.y] = next;
-    const name = `${it.y}_${next}`;
-    try {
-      await dataset.update(it._id, { name });
-    } catch (e) {
-      console.warn('Could not update instance name', it._id, e);
-    }
-  }
 }
 
 async function init() {
@@ -63,9 +40,6 @@ async function init() {
   } catch (error) {
     await store.loginWithUI();
   }
-
-  // Ensure existing instances have readable names like "good_1"
-  await ensureInstanceNames(trainingSet);
 }
 
 // ✅ Inputs
@@ -118,7 +92,7 @@ const labelsUI = labelBar(classLabels, (lab) => {
 });
 
 // --------------------
-// Save helper (webcam preferred, else upload)
+// Save helpers
 // --------------------
 async function saveExampleToTraining(label) {
   const img = lastWebcamImage || lastUploaded;
@@ -131,7 +105,21 @@ async function saveExampleToTraining(label) {
     x: img,
     y: label,
     createdAt: Date.now(),
-    source: webcam.image ? 'webcam' : 'upload',
+    source: lastWebcamImage ? 'webcam' : 'upload',
+  });
+}
+
+async function saveExampleToTest(label) {
+  const img = upload.image || lastUploaded;
+  if (!img) {
+    console.warn('No uploaded image available: please upload a test image first.');
+    return;
+  }
+  await testSet.create({
+    x: img,
+    y: label,
+    createdAt: Date.now(),
+    source: 'upload-test',
   });
 }
 
@@ -142,6 +130,15 @@ const captureOneBtn = marcelle.button('Capture 1 instance (selected label)');
 captureOneBtn.title = 'Capture 1 labeled frame';
 captureOneBtn.$click.subscribe(async () => {
   await saveExampleToTraining(selectedLabel);
+});
+
+// --------------------
+// Add uploaded image to TEST set
+// --------------------
+const addToTestBtn = marcelle.button('Add uploaded image to TEST (selected label)');
+addToTestBtn.title = 'Add current uploaded image to test set';
+addToTestBtn.$click.subscribe(async () => {
+  await saveExampleToTest(selectedLabel);
 });
 
 // --------------------
@@ -227,8 +224,9 @@ dashboard
     featureExtractor,
     upload,
     labelsUI,        // ✅ row of label buttons (custom component)
-    captureOneBtn,   // ✅ capture 1 (webcam or uploaded)
-    recordBtn,       // ✅ hold to record (webcam)
+    captureOneBtn,   // ✅ capture 1 (webcam or uploaded) -> TRAIN set
+    recordBtn,       // ✅ toggle recording (webcam)      -> TRAIN set
+    addToTestBtn,    // ✅ add uploaded image             -> TEST set
     trainingBrowser
   );
 
