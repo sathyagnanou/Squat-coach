@@ -36,6 +36,28 @@ function nextName(label) {
 }
 
 /**
+ * Load an image file into ImageData at the target size (center crop, cover).
+ */
+async function fileToImageData(file, width = 224, height = 224) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width - min) / 2;
+      const sy = (img.height - min) / 2;
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, width, height);
+      resolve(ctx.getImageData(0, 0, width, height));
+    };
+    img.onerror = () => reject(new Error(`Failed to load image: ${file.name}`));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/**
  * Convert ImageData to a thumbnail data URL for datasetBrowser display.
  * Marcelle's datasetBrowser only loads 'thumbnail' for display, not 'x'.
  */
@@ -129,22 +151,6 @@ async function saveExampleToTraining(label) {
   });
 }
 
-async function saveExampleToTest(label) {
-  const img = upload.image || lastUploaded;
-  if (!img) {
-    console.warn('No uploaded image available: please upload a test image first.');
-    return;
-  }
-  const thumb = lastUploadThumbnail || imageDataToThumbnail(img);
-  await testSet.create({
-    x: img,
-    y: label,
-    thumbnail: thumb,
-    createdAt: Date.now(),
-    source: 'upload-test',
-  });
-}
-
 // --------------------
 // One-click capture button (uses selectedLabel)
 // --------------------
@@ -154,14 +160,82 @@ captureOneBtn.$click.subscribe(async () => {
   await saveExampleToTraining(selectedLabel);
 });
 
- // --------------------
-// Add uploaded image to TEST set
 // --------------------
-const addToTestBtn = marcelle.button('Add uploaded image to TEST (selected label)');
-addToTestBtn.title = 'Add current uploaded image to test set';
-addToTestBtn.$click.subscribe(async () => {
-  await saveExampleToTest(selectedLabel);
+// Bulk upload (multiple images at once) → TRAINING set
+// --------------------
+const bulkUploadBtn = marcelle.button('Upload multiple images (selected label)');
+bulkUploadBtn.title = 'Select multiple images to add to training set';
+const bulkUploadInput = document.createElement('input');
+bulkUploadInput.type = 'file';
+bulkUploadInput.accept = 'image/*';
+bulkUploadInput.multiple = true;
+bulkUploadInput.style.display = 'none';
+bulkUploadInput.addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  if (files.length === 0) return;
+  const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+  if (imageFiles.length === 0) {
+    console.warn('No image files selected.');
+    return;
+  }
+  for (const file of imageFiles) {
+    try {
+      const imgData = await fileToImageData(file);
+      const thumb = imageDataToThumbnail(imgData);
+      await trainingSet.create({
+        name: nextName(selectedLabel),
+        x: imgData,
+        y: selectedLabel,
+        thumbnail: thumb,
+        createdAt: Date.now(),
+        source: 'bulk-upload',
+      });
+    } catch (err) {
+      console.warn(`Skipped ${file.name}:`, err.message);
+    }
+  }
 });
+bulkUploadBtn.$click.subscribe(() => bulkUploadInput.click());
+document.body.appendChild(bulkUploadInput);
+
+// --------------------
+// Add multiple images to TEST set
+// --------------------
+const bulkUploadTestBtn = marcelle.button('Upload multiple images to TEST (selected label)');
+bulkUploadTestBtn.title = 'Select multiple images to add to test set';
+const bulkUploadTestInput = document.createElement('input');
+bulkUploadTestInput.type = 'file';
+bulkUploadTestInput.accept = 'image/*';
+bulkUploadTestInput.multiple = true;
+bulkUploadTestInput.style.display = 'none';
+bulkUploadTestInput.addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  if (files.length === 0) return;
+  const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+  if (imageFiles.length === 0) {
+    console.warn('No image files selected.');
+    return;
+  }
+  for (const file of imageFiles) {
+    try {
+      const imgData = await fileToImageData(file);
+      const thumb = imageDataToThumbnail(imgData);
+      await testSet.create({
+        x: imgData,
+        y: selectedLabel,
+        thumbnail: thumb,
+        createdAt: Date.now(),
+        source: 'bulk-upload-test',
+      });
+    } catch (err) {
+      console.warn(`Skipped ${file.name}:`, err.message);
+    }
+  }
+});
+bulkUploadTestBtn.$click.subscribe(() => bulkUploadTestInput.click());
+document.body.appendChild(bulkUploadTestInput);
 
 // --------------------
 // Toggle recording (webcam only)
@@ -313,8 +387,9 @@ dashboard
     upload,
     labelsUI,        // ✅ row of label buttons (custom component)
     captureOneBtn,   // ✅ capture 1 (webcam or uploaded) -> TRAIN set
+    bulkUploadBtn,   // ✅ select multiple images         -> TRAIN set
     recordBtn,       // ✅ toggle recording (webcam)      -> TRAIN set
-    addToTestBtn,    // ✅ add uploaded image             -> TEST set
+    bulkUploadTestBtn, // ✅ upload multiple images       -> TEST set
     trainingBrowser
   );
 

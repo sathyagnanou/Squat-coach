@@ -91,8 +91,9 @@ package.json, vite.config.js, svelte.config.js, index.html, .gitignore, etc.
 --------------------------------------------------------------------------------
 4. KNOWN LIMITATIONS / DESIGN CHOICES
 --------------------------------------------------------------------------------
-- Single image upload only — Marcelle imageUpload exposes one current image;
-  bulk upload not supported in UI; test set typically prepared in advance.
+- imageUpload: single image at a time; bulk upload via "Upload multiple images"
+  button (file input with multiple) — all selected images added to training set
+  with the currently selected label; test set typically prepared in advance.
 - datasetBrowser displays actual image thumbnails when `thumbnail` is stored
   with each instance (new captures include thumbnails); custom instance names
   (good_1, etc.) are stored but may not be displayed in the browser.
