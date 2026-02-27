@@ -51,7 +51,7 @@
     // If your Marcelle server doesn't allow update, tell me and I'll give a fallback strategy.
     await queueSet.update(instance._id, { status: 'done', reviewedAt: Date.now(), finalLabel: y });
 
-    message = `✅ Labeled 1 item as "${y}" and added to training set.`;
+    message = `Labeled 1 item as "${y}" and added to training set.`;
     await refresh();
   }
 
@@ -63,7 +63,7 @@
 <ViewContainer {title}>
   <div class="topbar">
     <button class="btn" on:click={refresh} disabled={loading}>
-      {loading ? 'Loading…' : '🔄 Refresh'}
+      {loading ? 'Loading…' : 'Refresh'}
     </button>
     <div class="hint">
       Showing <b>{items.length}</b> most uncertain queue items (status: todo)

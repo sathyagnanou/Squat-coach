@@ -83,10 +83,10 @@ package.json, vite.config.js, svelte.config.js, index.html, .gitignore, etc.
 
 3.8 Dashboard pages
 - Data Management: webcam, featureExtractor, upload, labelsUI, captureOneBtn,
-  recordBtn, addToTestBtn, trainingBrowser
+  recordBtn, addToTestBtn, trainingBrowser, testBrowser
 - Training: trainBtn, prog (trainingProgress)
 - Real-time Prediction: webcam, predViz (confidencePlot)
-- Performance: evalBtn, evalResultsComp, trainingBrowser, testBrowser
+- Performance: evalBtn, evalResultsComp (no dataset browsers)
 
 --------------------------------------------------------------------------------
 4. KNOWN LIMITATIONS / DESIGN CHOICES
@@ -117,6 +117,18 @@ package.json, vite.config.js, svelte.config.js, index.html, .gitignore, etc.
 3. Real-time Prediction: Turn on webcam, see confidence plot
 4. Performance: Add test images (curated), click "Evaluate on TEST set",
    view accuracy and confusion matrix in the Evaluation results panel
+
+--------------------------------------------------------------------------------
+7. REPORT & PRESENTATION
+--------------------------------------------------------------------------------
+- report.tex: LaTeX report in 2-column format, max 5 pages (excluding refs/appendix)
+- Screenshot: Create folder assets/ in the project root, save your screenshot as
+  assets/screenshot.png. The report includes it with \includegraphics{assets/screenshot.png}.
+  If you use another path, edit that line in report.tex.
+- Presentation: 10 min total (slides + live demo)
+  - Slides: ~13 slides (cut Data Collection, Real-Time Feedback, Evaluation detail)
+  - Demo: 2-3 min live (Data Management → Training → Real-time Prediction → Performance)
+  - TODO: Fix slide 4 (remove heels_up/heels-in mention), fix slide 16 (replace placeholder refs)
 
 ================================================================================
 End of PROJECT_CONTEXT.txt

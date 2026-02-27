@@ -1,0 +1,101 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{url}
+\usepackage{geometry}
+\geometry{margin=0.9in, top=0.9in, bottom=0.9in}
+
+\title{Squat Coach: An Interactive Machine Learning System for Movement Quality Feedback}
+\author{IML2026 Project}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present Squat Coach, an interactive machine learning application that supports athletes and coaches in assessing squat movement quality. The system focuses on three criteria---good form, knees-in (valgus), and shallow depth---and is designed to be personalized by a coach for a given user. Users collect and label their own squat recordings, train a transfer-learning classifier (MobileNet plus a small MLP), and receive real-time predictions as well as evaluation metrics on a curated test set. We describe the scenario, design, implementation, and a proposal for human-centered evaluation.
+\end{abstract}
+
+\section{Introduction}
+
+Assessing and improving squat form matters for injury prevention and athletic performance. Many existing tools for movement or pose analysis rely on generic, pre-trained models that are not tailored to individual users, camera setups, or the specific criteria a coach cares about. Squat Coach takes an interactive machine learning (IML) approach: the model is trained on data that the user or coach collects and labels, so it can be personalized to their definitions of movement quality and to the athlete's context. This report briefly contextualizes the work, presents the scenario and users, describes the proposed design and implementation, and outlines a human-centered evaluation proposal.
+
+\section{Scenario}
+
+\subsection{Context of use and users}
+
+The application is intended for use in a coaching context where movement quality, rather than mere movement recognition, is the focus. Two types of users are considered.
+
+The coach has expertise in movement analysis and defines what counts as correct or faulty form. Their goals are to set up a feedback system for one or several athletes, to align the system with their own criteria (e.g., knee valgus, depth), and to maintain or update the model as needed. The coach is actively involved in defining the labels, curating or collecting training and test data, training the model, and auditing its behavior via the evaluation metrics. They are not passive consumers of a fixed classifier; they participate in the training and auditing loop.
+
+The athlete may have little or no expertise in exercise science. Their goal is to perform squats and receive understandable feedback on whether their form matches the coach's criteria. They benefit from real-time predictions once the coach has configured and trained the system. Optionally, the athlete can also contribute training data (e.g., recording themselves with the coach's labels), thus participating in the training process.
+
+This scenario emphasizes the active involvement of users in the training and auditing of the model, as advocated in IML and human-centered ML literature~\cite{iml,marcelle}: the coach (and possibly the athlete) produces and curates data, triggers training, and inspects evaluation results to judge and improve the system.
+
+\subsection{Optional literature note}
+
+Interactive and human-centered machine learning has been discussed in HCI and ML for controlling and auditing automated systems~\cite{iml}. Toolkits such as Marcelle~\cite{marcelle} support the composition of data collection, model training, and feedback interfaces. In movement and sports contexts, personalization is often necessary because criteria (e.g., what counts as ``good'' depth) and user contexts (camera, body type) vary. Our scenario aligns with the idea that coaches and athletes should be able to shape and audit the model rather than depend on a single black-box classifier.
+
+\section{Proposed design: workflow and user interface}
+
+The workflow is designed to be relevant for the task from the users' perspective: first gather and label data, then train, then use the model for feedback and evaluation.
+
+Data collection and labeling form the first step. The user chooses one of three labels (good, knees\_in, shallow) and then either captures frames from the webcam (single capture or automatic capture every 0.5\,s while holding a pose) or uploads multiple images at once. All captured or uploaded images are stored with the currently selected label. The training set is used to train the model; a separate test set (e.g., curated reference images from the web) is used only for evaluation. The interface makes this distinction explicit with two bulk-upload actions and two dataset browsers (training and test) on the same page, so the user can see what has been collected. A short on-screen tip instructs the user to choose a label before capturing or uploading, to avoid mislabeling.
+
+Training is a single action: the user clicks a button and the model is trained on the current training set; progress is displayed. No hyperparameter tuning is exposed in the UI, so the workflow remains simple for the coach.
+
+Real-time prediction is the main feedback modality for the athlete. A dedicated page shows the webcam stream and a confidence plot of the three classes. The athlete can adjust their form and observe how the model's predictions change.
+
+Evaluation and auditing are supported on a separate Performance page. The user runs the model on the test set and sees overall accuracy, per-class accuracy, and a confusion matrix in the interface. This allows the coach to judge whether the model is ready for use and where it tends to make mistakes.
+
+The user interface is organized into four pages (Data Management, Training, Real-time Prediction, Performance). Figure~\ref{fig:app} shows the Data Management page: webcam, label bar, tip, capture and upload buttons, and the two dataset browsers. The design keeps the workflow linear and avoids cluttering the main data page with model internals (e.g., no technical display of the feature extractor).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{assets/screenshot.png}
+\caption{Data Management page: webcam, labels, tip, capture/upload buttons, and training \& test dataset browsers.}
+\label{fig:app}
+\end{figure}
+
+\section{Implementation and demo}
+
+The application is built with Marcelle~\cite{marcelle}, an open-source toolkit for interactive machine learning. The frontend uses Svelte and Vite; data and model parameters are stored on a Marcelle backend so the trained model persists across sessions.
+
+Datasets are constructed by users. The training set is populated via webcam (single frame or toggle recording every 0.5\,s) or via bulk upload of image files; each instance is stored with the label selected at capture or upload time. The test set is populated the same way (bulk upload with a selected label), typically with curated images (e.g., from the web) that the coach labels as ground truth. No pre-packaged dataset is required; both sets are user-built.
+
+The model is a transfer-learning pipeline: a MobileNet v1 feature extractor (pre-trained on ImageNet, frozen) produces a feature vector from each 224$\times$224 image; a small MLP (two hidden layers of 32 units, 20 epochs) is trained on these features and outputs the three classes. The classifier is synced to the backend under a team identifier.
+
+The current implementation covers the full scenario: data collection (webcam and bulk upload for both training and test sets), training with progress feedback, real-time prediction with a confidence plot, and evaluation with overall accuracy, per-class accuracy, and confusion matrix displayed in the UI. A live demo can walk through these four steps---adding a few labeled examples, training, showing real-time predictions, and running evaluation on the test set---in a few minutes.
+
+\section{Proposal for human-centered evaluation}
+
+To measure the effectiveness of the proposed interactions, we suggest a small mixed-methods study. Participants would be coaches or athletes (or both) who have a stake in squat feedback.
+
+A first dimension is usefulness and usability of the workflow. Participants could perform a set of tasks (e.g., add training data for each label, train the model, interpret the evaluation results) while thinking aloud or being observed. Task completion, time on task, and subjective ratings (e.g., ease of use, clarity of the label-and-capture flow) would be collected. This addresses whether the design is relevant and usable for the given task.
+
+A second dimension is perceived value of the feedback. After training, participants could use the real-time prediction page and report whether the feedback (confidence plot and dominant class) is understandable and actionable. Short interviews or questionnaires could capture whether they trust the model and whether they would use it in practice. Optionally, one could compare conditions (e.g., with vs.\ without the tip about choosing a label) to see if such cues reduce labeling errors or confusion.
+
+A third dimension is model auditing. Participants could be asked to run evaluation, inspect the confusion matrix, and explain what they would do next (e.g., add more data for a misclassified class). This would reveal whether the evaluation interface supports meaningful auditing of the model by non-experts.
+
+Such a study would remain brief (e.g., one session per participant) but would yield both qualitative and quantitative evidence on the effectiveness of the interactions, in line with human-centered evaluation of IML systems.
+
+\section{Conclusion}
+
+Squat Coach illustrates an IML approach to movement quality feedback: a coach personalizes the model by defining labels and curating data, and the athlete receives real-time predictions aligned with those criteria. The scenario and design emphasize active user involvement in training and auditing. The implementation provides a complete pipeline from user-constructed datasets through training, real-time prediction, and in-interface evaluation. A human-centered evaluation could focus on workflow usability, perceived value of feedback, and the usefulness of the evaluation panel for auditing the model.
+
+\begin{thebibliography}{9}
+
+\bibitem{marcelle}
+Françoise, J., Fosty, B., Bevilacqua, F., \& Leroy, N. (2021). Marcelle: Composing Interactive Machine Learning Workflows and Interfaces. \textit{ACM UIST 2021}.
+
+\bibitem{iml}
+Amershi, S., et al. (2019). Guidelines for Human-AI Interaction. \textit{CHI 2019}.
+
+\end{thebibliography}
+
+\end{document}

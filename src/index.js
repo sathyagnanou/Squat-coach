@@ -4,13 +4,11 @@ import * as marcelle from '@marcellejs/core';
 import { writable } from 'svelte/store';
 import { labelBar, evalResults } from './components';
 
-// ✅ Store — use VITE_DATA_STORE_URL, or in dev default to 'memory' so the app works without the remote backend
 const storeUrl =
   import.meta.env.VITE_DATA_STORE_URL ??
   (import.meta.env.DEV ? 'memory' : 'https://marcelle.lisn.upsaclay.fr/iml2026/api');
 const store = marcelle.dataStore(storeUrl);
 
-// Small polyfill so arrays work with Marcelle's internal `.map(...).toArray()` chains
 if (!Array.prototype.toArray) {
   // eslint-disable-next-line no-extend-native
   Array.prototype.toArray = function () {
@@ -18,15 +16,12 @@ if (!Array.prototype.toArray) {
   };
 }
 
-// ✅ Labels
 const classLabels = ['good', 'knees_in', 'shallow'];
 let selectedLabel = classLabels[0];
 
-// ✅ Datasets (ONE training set so datasetBrowser groups by y like your screenshot)
 const trainingSet = marcelle.dataset('project-images', store);
 const testSet = marcelle.dataset('project-test-images', store);
 
-// Keep simple per-label counters to generate instance names like "good_1"
 const labelCounts = {};
 
 function nextName(label) {
@@ -35,9 +30,6 @@ function nextName(label) {
   return `${label}_${next}`;
 }
 
-/**
- * Load an image file into ImageData at the target size (center crop, cover).
- */
 async function fileToImageData(file, width = 224, height = 224) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -57,10 +49,6 @@ async function fileToImageData(file, width = 224, height = 224) {
   });
 }
 
-/**
- * Convert ImageData to a thumbnail data URL for datasetBrowser display.
- * Marcelle's datasetBrowser only loads 'thumbnail' for display, not 'x'.
- */
 function imageDataToThumbnail(imgData, maxSize = 100) {
   if (!imgData || !imgData.data) return null;
   const scale = Math.min(maxSize / imgData.width, maxSize / imgData.height, 1);
@@ -85,11 +73,9 @@ async function init() {
   }
 }
 
-// ✅ Inputs
 const webcam = marcelle.webcam({ width: 224, height: 224 });
 const upload = marcelle.imageUpload({ width: 224, height: 224 });
 
-// Keep last webcam / uploaded image and thumbnail for labeling
 let lastWebcamImage = null;
 let lastWebcamThumbnail = null;
 if (webcam.$images) webcam.$images.subscribe((img) => { lastWebcamImage = img; });
@@ -100,7 +86,6 @@ let lastUploadThumbnail = null;
 if (upload.$images) upload.$images.subscribe((img) => { lastUploaded = img; });
 if (upload.$thumbnails) upload.$thumbnails.subscribe((t) => { lastUploadThumbnail = t; });
 
-// ✅ Model
 const featureExtractor = marcelle.mobileNet();
 const classifier = marcelle
   .mlpClassifier({ layers: [32, 32], epochs: 20 })
@@ -108,7 +93,6 @@ const classifier = marcelle
 
 const prog = marcelle.trainingProgress(classifier);
 
-// ✅ Real-time prediction (webcam)
 const $predictions = webcam.$images
   .filter(() => classifier.ready)
   .map(async (img) => {
@@ -119,20 +103,33 @@ const $predictions = webcam.$images
 
 const predViz = marcelle.confidencePlot($predictions);
 
-// ✅ Browsers
 const trainingBrowser = marcelle.datasetBrowser(trainingSet);
 trainingBrowser.title = 'Squat dataset (training)';
 const testBrowser = marcelle.datasetBrowser(testSet);
 testBrowser.title = 'Squat dataset (test)';
 
-// ✅ Label bar (custom component)
 const labelsUI = labelBar(classLabels, (lab) => {
   selectedLabel = lab;
 });
 
-// --------------------
-// Save helpers
-// --------------------
+class LabelHint extends marcelle.Component {
+  constructor() {
+    super();
+    this.title = 'Tip';
+  }
+  mount(target) {
+    const t = target || document.querySelector(`#${this.id}`);
+    if (!t) return;
+    const el = document.createElement('p');
+    el.className = 'label-hint';
+    el.style.margin = '0 0 8px 0';
+    el.style.fontSize = '0.9rem';
+    el.style.color = '#555';
+    el.textContent = 'Choose a label above before capturing or uploading images.';
+    t.appendChild(el);
+  }
+}
+
 async function saveExampleToTraining(label) {
   const img = lastWebcamImage || lastUploaded;
   if (!img) {
@@ -151,20 +148,14 @@ async function saveExampleToTraining(label) {
   });
 }
 
-// --------------------
-// One-click capture button (uses selectedLabel)
-// --------------------
-const captureOneBtn = marcelle.button('Capture 1 instance (selected label)');
-captureOneBtn.title = 'Capture 1 labeled frame';
+const captureOneBtn = marcelle.button('Click to capture');
+captureOneBtn.title = 'Capture one frame (from webcam)';
 captureOneBtn.$click.subscribe(async () => {
   await saveExampleToTraining(selectedLabel);
 });
 
-// --------------------
-// Bulk upload (multiple images at once) → TRAINING set
-// --------------------
-const bulkUploadBtn = marcelle.button('Upload multiple images (selected label)');
-bulkUploadBtn.title = 'Select multiple images to add to training set';
+const bulkUploadBtn = marcelle.button('Click here to upload');
+bulkUploadBtn.title = 'Upload multiple images to train set';
 const bulkUploadInput = document.createElement('input');
 bulkUploadInput.type = 'file';
 bulkUploadInput.accept = 'image/*';
@@ -199,11 +190,8 @@ bulkUploadInput.addEventListener('change', async (e) => {
 bulkUploadBtn.$click.subscribe(() => bulkUploadInput.click());
 document.body.appendChild(bulkUploadInput);
 
-// --------------------
-// Add multiple images to TEST set
-// --------------------
-const bulkUploadTestBtn = marcelle.button('Upload multiple images to TEST (selected label)');
-bulkUploadTestBtn.title = 'Select multiple images to add to test set';
+const bulkUploadTestBtn = marcelle.button('Click here to upload');
+bulkUploadTestBtn.title = 'Upload multiple images to test set';
 const bulkUploadTestInput = document.createElement('input');
 bulkUploadTestInput.type = 'file';
 bulkUploadTestInput.accept = 'image/*';
@@ -237,9 +225,6 @@ bulkUploadTestInput.addEventListener('change', async (e) => {
 bulkUploadTestBtn.$click.subscribe(() => bulkUploadTestInput.click());
 document.body.appendChild(bulkUploadTestInput);
 
-// --------------------
-// Toggle recording (webcam only)
-// --------------------
 const recordBtn = marcelle.button('Start recording (every 0.5s)');
 recordBtn.title = 'Record labeled sequence';
 let recordInterval = null;
@@ -273,7 +258,6 @@ function stopRecording() {
   recordInterval = null;
 }
 
-// Click once to start, click again to stop
 recordBtn.$click.subscribe(() => {
   if (isRecording) {
     stopRecording();
@@ -282,9 +266,6 @@ recordBtn.$click.subscribe(() => {
   }
 });
 
-// --------------------
-// Training
-// --------------------
 const trainBtn = marcelle.button('Train model');
 trainBtn.title = 'Train squat classifier';
 trainBtn.$click.subscribe(async () => {
@@ -306,9 +287,6 @@ trainBtn.$click.subscribe(async () => {
   await classifier.train(trainingData);
 });
 
-// --------------------
-// Evaluate on TEST set
-// --------------------
 const evalResultsStore = writable({
   status: 'idle',
   message: 'Click "Evaluate on TEST set" to run evaluation.',
@@ -371,9 +349,6 @@ evalBtn.$click.subscribe(async () => {
   }
 });
 
-// --------------------
-// Dashboard (same layout style)
-// --------------------
 const dashboard = marcelle.dashboard({
   title: `IML2026 - Squat Coach (Team ${store.user?.team ?? 'local'})`,
   author: `Team ${store.user?.team ?? 'local'}`,
@@ -383,19 +358,19 @@ dashboard
   .page('Data Management')
   .use(
     webcam,
-    featureExtractor,
-    upload,
-    labelsUI,        // ✅ row of label buttons (custom component)
-    captureOneBtn,   // ✅ capture 1 (webcam or uploaded) -> TRAIN set
-    bulkUploadBtn,   // ✅ select multiple images         -> TRAIN set
-    recordBtn,       // ✅ toggle recording (webcam)      -> TRAIN set
-    bulkUploadTestBtn, // ✅ upload multiple images       -> TEST set
-    trainingBrowser
+    labelsUI,
+    new LabelHint(),
+    captureOneBtn,
+    bulkUploadBtn,
+    recordBtn,
+    bulkUploadTestBtn,
+    trainingBrowser,
+    testBrowser
   );
 
 dashboard.page('Training').use(trainBtn, prog);
 dashboard.page('Real-time Prediction').use(webcam, predViz);
-dashboard.page('Performance').use(evalBtn, evalResultsComp, trainingBrowser, testBrowser);
+dashboard.page('Performance').use(evalBtn, evalResultsComp);
 
 dashboard.show();
 
